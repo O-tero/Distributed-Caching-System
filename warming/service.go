@@ -98,7 +98,6 @@ type CacheClient interface {
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
 }
 
-// Request and response types
 
 type WarmKeyRequest struct {
 	Keys     []string `json:"keys"`               // Keys to warm
@@ -108,7 +107,7 @@ type WarmKeyRequest struct {
 
 type WarmKeyResponse struct {
 	Success      bool     `json:"success"`
-	Queued       int      `json:"queued"`        // Number of tasks queued
+	Queued       int      `json:"queued"`       
 	Keys         []string `json:"keys"`
 	JobID        string   `json:"job_id"`
 	EstimatedTime int     `json:"estimated_time_ms"`
@@ -176,14 +175,12 @@ var svc *Service
 func initService() (*Service, error) {
 	config := DefaultConfig()
 
-	// Initialize strategies
 	strategies := map[string]Strategy{
 		"selective": NewSelectiveHotKeysStrategy(),
 		"breadth":   NewBreadthFirstStrategy(),
 		"priority":  NewPriorityBasedStrategy(),
 	}
 
-	// Initialize predictor
 	predictor := NewDefaultPredictor()
 
 	// Create service
@@ -195,10 +192,7 @@ func initService() (*Service, error) {
 		rateLimiter: rate.NewLimiter(rate.Limit(config.MaxOriginRPS), config.MaxOriginRPS),
 	}
 
-	// Initialize worker pool
 	s.workerPool = NewWorkerPool(s, config.ConcurrentWarmers)
-
-	// Initialize scheduler
 	s.scheduler = NewScheduler(s)
 
 	return s, nil
@@ -547,7 +541,6 @@ func generateJobID() string {
 func (s *Service) ExecuteWarmTask(ctx context.Context, task WarmTask) error {
 	startTime := time.Now()
 
-	// Check emergency stop
 	if s.emergencyStop.Load() {
 		return errors.New("emergency stop active")
 	}

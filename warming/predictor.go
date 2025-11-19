@@ -25,8 +25,6 @@ type Predictor interface {
 // 5. Return top N keys by score
 //
 // Trade-offs:
-// - Simple and fast (no ML overhead)
-// - Works well for stable access patterns
 // - Less effective for sudden traffic spikes or new content
 // - TODO: Replace with ML model for better accuracy
 type DefaultPredictor struct {
@@ -40,10 +38,10 @@ type DefaultPredictor struct {
 type AccessHistory struct {
 	Key           string
 	TotalAccesses int64
-	RecentAccesses int64     // Accesses in current window
+	RecentAccesses int64   
 	FirstSeen     time.Time
 	LastAccessed  time.Time
-	AccessTimes   []time.Time // Recent access timestamps (limited size)
+	AccessTimes   []time.Time 
 }
 
 // NewDefaultPredictor creates a new default predictor.
@@ -51,7 +49,7 @@ func NewDefaultPredictor() *DefaultPredictor {
 	return &DefaultPredictor{
 		accessLog:   make(map[string]*AccessHistory),
 		windowSize:  1 * time.Hour,
-		decayFactor: 0.9, // Decay older accesses
+		decayFactor: 0.9, 
 	}
 }
 
@@ -156,13 +154,12 @@ func (p *DefaultPredictor) calculateScore(history *AccessHistory, now, cutoff ti
 		growthRate = (recentFrequency - frequency) / frequency
 	}
 
-	// Recency bonus (recently accessed keys are more likely to be accessed again)
 	timeSinceLast := now.Sub(history.LastAccessed).Minutes()
 	recencyBonus := 1.0
 	if timeSinceLast < 5 {
-		recencyBonus = 2.0 // Strong recency
+		recencyBonus = 2.0 
 	} else if timeSinceLast < 30 {
-		recencyBonus = 1.5 // Moderate recency
+		recencyBonus = 1.5 
 	}
 
 	// Calculate final score
@@ -208,7 +205,6 @@ func (p *DefaultPredictor) GetStats() PredictorStats {
 	}
 }
 
-// PredictorStats provides statistics about the predictor.
 type PredictorStats struct {
 	TrackedKeys   int   `json:"tracked_keys"`
 	TotalAccesses int64 `json:"total_accesses"`

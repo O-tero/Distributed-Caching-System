@@ -43,7 +43,6 @@ func NewScheduler(service *Service) *Scheduler {
 	}
 }
 
-// Encore cron jobs for pre-defined warming schedules
 
 // DailyWarmup warms critical cache keys daily at 2 AM.
 var _ = cron.NewJob("daily-warmup", cron.JobConfig{
