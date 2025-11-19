@@ -65,7 +65,6 @@ func (a *Aggregator) Run() {
 func (a *Aggregator) aggregate() {
 	now := time.Now()
 
-	// Get current metrics
 	counters := a.collector.GetCounters()
 	latencyStats := a.collector.GetLatencyStats()
 
