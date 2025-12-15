@@ -729,30 +729,6 @@ encore lint
 cd frontend/dashboard && npm run lint
 ```
 
-### Code Structure
-
-**Backend (Go + Encore):**
-- Follow Go standard conventions
-- Use Encore service patterns
-- Keep functions small (<50 lines)
-- Write tests for all public APIs
-
-**Frontend (TypeScript + React):**
-- Use functional components with hooks
-- Follow React best practices
-- Keep components focused (<200 lines)
-- Write tests for critical paths
-
-### Pre-commit Checklist
-
-- [ ] Code passes `go test ./...`
-- [ ] Code passes `npm test`
-- [ ] No linting errors
-- [ ] Updated documentation
-- [ ] Added tests for new features
-- [ ] Changelog updated
-- [ ] .env.example updated if needed
-
 ---
 
 ## 🧪 Testing
@@ -807,7 +783,7 @@ npm run coverage
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please follow these guidelines:
 
@@ -839,7 +815,7 @@ We welcome contributions! Please follow these guidelines:
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -888,7 +864,7 @@ docker compose up -d
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 - [Architecture Overview](docs/architecture.md)
 - [API Reference](docs/api.md)
@@ -898,7 +874,7 @@ docker compose up -d
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 ### Version 1.0 (Current)
 - ✅ Dual-layer caching (L1 + L2)
@@ -927,7 +903,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Encore](https://encore.dev) - Backend framework
 - [Vite](https://vitejs.dev) - Frontend build tool
@@ -938,7 +914,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**⭐ Star us on GitHub** — it helps!
+** Star us on GitHub** — it helps!
 
 [Documentation](docs/) • [API Reference](docs/api.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md)
 
