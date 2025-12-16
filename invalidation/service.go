@@ -57,7 +57,14 @@ type Metrics struct {
 }
 
 // Database for audit logging
-var db = sqldb.Named("invalidation_db")
+//
+// Encore requires databases to be declared with sqldb.NewDatabase.
+var db = sqldb.NewDatabase(
+	"invalidation_db",
+	sqldb.DatabaseConfig{
+		Migrations: "./migrations",
+	},
+)
 
 // Initialize service with dependencies
 func initService() (*Service, error) {

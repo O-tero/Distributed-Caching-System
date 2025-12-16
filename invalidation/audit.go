@@ -90,7 +90,7 @@ func (al *AuditLogger) Insert(ctx context.Context, log AuditLog) error {
 		INSERT INTO invalidation_audit 
 		(pattern, keys, triggered_by, timestamp, request_id, latency_ms)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT DO NOTHING
+		ON CONFLICT (request_id) DO NOTHING
 	`
 
 	_, err = al.db.Exec(ctx, query,
