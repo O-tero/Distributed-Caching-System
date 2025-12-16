@@ -1,0 +1,178 @@
+# Docker Compose configuration for local development
+# Purpose: Runs Postgres, Redis, and Prometheus for distributed caching system
+# Usage: docker compose up -d
+# 
+# SECURITY NOTE: All ports bind to localhost (127.0.0.1) only.
+# DO NOT use this configuration in production without security review.
+#
+# Prerequisites:
+#   - Docker Engine 20.10+ with Compose V2
+#   - Copy .env.example to .env and configure as needed
+#
+# Quick start:
+#   1. cp .env.example .env
+#   2. docker compose up -d
+#   3. docker compose logs -f
+#   4. docker compose down -v (cleanup)
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  # Stores audit logs, metrics events, and system metadata
+  postgres:
+    image: postgres:15-alpine
+    container_name: cache_postgres
+    restart: unless-stopped
+    
+    # SECURITY: Bind to localhost only
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-distributed_cache}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    
+    volumes:
+      # Persistent data storage
+      - pgdata:/var/lib/postgresql/data
+      # Initialization scripts (run on first start only)
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cache_user} -d ${POSTGRES_DB:-distributed_cache}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    networks:
+      - cache_network
+
+  # Redis Cache Store
+  # L2 cache storage with LRU eviction policy
+  redis:
+    image: redis:7-alpine
+    container_name: cache_redis
+    restart: unless-stopped
+    
+    # SECURITY: Bind to localhost only
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    
+    command: redis-server /usr/local/etc/redis/redis.conf
+    
+    volumes:
+      # Persistent data storage (optional in dev)
+      - redisdata:/data
+      # Custom configuration
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    
+    networks:
+      - cache_network
+
+  # Prometheus Metrics Collector
+  # Scrapes metrics from cache-manager and monitoring services
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: cache_prometheus
+    restart: unless-stopped
+    
+    # SECURITY: Bind to localhost only
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    
+    volumes:
+      # Configuration
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Persistent metrics storage
+      - prometheus_data:/prometheus
+    
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    networks:
+      - cache_network
+    
+    depends_on:
+      - postgres
+      - redis
+
+# Named volumes for data persistence
+volumes:
+  pgdata:
+    driver: local
+    name: cache_pgdata
+  
+  redisdata:
+    driver: local
+    name: cache_redisdata
+  
+  prometheus_data:
+    driver: local
+    name: cache_prometheus_data
+
+# Network isolation
+networks:
+  cache_network:
+    name: cache_network
+    driver: bridge
+
+# OPTIONAL: Add Grafana for visualization
+# Uncomment and configure as needed:
+#
+#  grafana:
+#    image: grafana/grafana:10.2.0
+#    container_name: cache_grafana
+#    restart: unless-stopped
+#    ports:
+#      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+#    environment:
+#      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+#      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+#      GF_INSTALL_PLUGINS: grafana-clock-panel
+#    volumes:
+#      - grafana_data:/var/lib/grafana
+#      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+#    depends_on:
+#      - prometheus
+#    networks:
+#      - cache_network
+#
+#volumes:
+#  grafana_data:
+#    driver: local
+#    name: cache_grafana_data
+
+# PRODUCTION VARIANT NOTES:
+# For production deployment, consider docker-compose.prod.yml with:
+#   - Remove port bindings (use reverse proxy)
+#   - Add resource limits (mem_limit, cpus)
+#   - Use secrets instead of environment variables
+#   - Enable Redis persistence (AOF + RDB)
+#   - Add TLS for inter-service communication
+#   - Use external networks (not bridge)
+#   - Add logging drivers (json-file with rotation)
+#   - Implement health checks with restart policies
+#   - Use production-grade images (not alpine)
+#   - Add backup volumes and monitoring agents

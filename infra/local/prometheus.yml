@@ -1,0 +1,248 @@
+# Prometheus Configuration for Local Development
+# Purpose: Scrape metrics from distributed caching services
+# 
+# This configuration scrapes:
+#   - cache-manager service metrics
+#   - invalidation service metrics
+#   - warming service metrics
+#   - monitoring service metrics
+#   - Prometheus self-metrics
+#
+# Access Prometheus UI: http://localhost:9090
+#
+# PRODUCTION NOTES:
+#   - Use service discovery (Consul, Kubernetes, etc.)
+#   - Enable authentication and TLS
+#   - Configure remote storage for long-term retention
+#   - Set up alerting with Alertmanager
+#   - Add recording rules for performance
+
+# ============================================================================
+# GLOBAL CONFIGURATION
+# ============================================================================
+
+global:
+  # How frequently to scrape targets
+  scrape_interval: 15s
+  
+  # How long to wait before timing out a scrape request
+  scrape_timeout: 10s
+  
+  # How frequently to evaluate recording and alerting rules
+  evaluation_interval: 15s
+  
+  # Labels to add to all metrics and alerts
+  external_labels:
+    environment: 'local'
+    cluster: 'dev'
+    datacenter: 'localhost'
+
+# ============================================================================
+# ALERTING (Optional - requires Alertmanager)
+# ============================================================================
+
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# ============================================================================
+# RULE FILES (Optional)
+# ============================================================================
+
+# Load recording and alerting rules
+# rule_files:
+#   - "rules/*.yml"
+
+# ============================================================================
+# SCRAPE CONFIGURATIONS
+# ============================================================================
+
+scrape_configs:
+  # ----------------------------------------------------------------------------
+  # Prometheus Self-Monitoring
+  # ----------------------------------------------------------------------------
+  
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          role: 'monitoring'
+
+  # ----------------------------------------------------------------------------
+  # Cache Manager Service
+  # Provides L1/L2 cache metrics, hit rates, latency
+  # ----------------------------------------------------------------------------
+  
+  - job_name: 'cache-manager'
+    scrape_interval: 10s  # Scrape more frequently for cache metrics
+    static_configs:
+      - targets:
+          # Adjust ports based on your Encore service configuration
+          # Default Encore services expose metrics on their service port
+          - 'host.docker.internal:9400'  # Mac/Windows Docker Desktop
+          # For Linux, use: - '172.17.0.1:9400'
+        labels:
+          service: 'cache-manager'
+          role: 'cache'
+    
+    # Relabel to add instance name
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'cache-manager-local'
+
+  # ----------------------------------------------------------------------------
+  # Invalidation Service
+  # Tracks invalidation events, pattern matches, processing time
+  # ----------------------------------------------------------------------------
+  
+  - job_name: 'invalidation'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:9401'
+        labels:
+          service: 'invalidation'
+          role: 'invalidator'
+    
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'invalidation-local'
+
+  # ----------------------------------------------------------------------------
+  # Warming Service
+  # Tracks cache warming jobs, success rates, duration
+  # ----------------------------------------------------------------------------
+  
+  - job_name: 'warming'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:9402'
+        labels:
+          service: 'warming'
+          role: 'warmer'
+    
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'warming-local'
+
+  # ----------------------------------------------------------------------------
+  # Monitoring Service
+  # Aggregates metrics from other services
+  # ----------------------------------------------------------------------------
+  
+  - job_name: 'monitoring'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:9403'
+        labels:
+          service: 'monitoring'
+          role: 'aggregator'
+    
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'monitoring-local'
+
+  # ----------------------------------------------------------------------------
+  # Redis Exporter (Optional)
+  # Exposes Redis metrics (requires redis_exporter sidecar)
+  # ----------------------------------------------------------------------------
+  
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets:
+  #         - 'redis-exporter:9121'
+  #       labels:
+  #         service: 'redis'
+  #         role: 'cache-storage'
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL Exporter (Optional)
+  # Exposes Postgres metrics (requires postgres_exporter sidecar)
+  # ----------------------------------------------------------------------------
+  
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets:
+  #         - 'postgres-exporter:9187'
+  #       labels:
+  #         service: 'postgres'
+  #         role: 'database'
+
+# ============================================================================
+# STORAGE CONFIGURATION
+# ============================================================================
+
+# Local storage is configured via command-line flags in docker-compose.yml
+# For production, consider remote write to long-term storage:
+#
+# remote_write:
+#   - url: "https://prometheus-remote-storage.example.com/api/v1/write"
+#     basic_auth:
+#       username: "user"
+#       password: "password"
+
+# ============================================================================
+# EXAMPLE QUERIES
+# ============================================================================
+
+# Useful PromQL queries for the cache system:
+#
+# Cache hit rate:
+#   rate(cache_hits_total[5m]) / (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m]))
+#
+# Cache latency P95:
+#   histogram_quantile(0.95, rate(cache_latency_bucket[5m]))
+#
+# Invalidation rate:
+#   rate(invalidations_total[5m])
+#
+# L1 cache size:
+#   cache_l1_size_bytes
+#
+# L2 cache memory:
+#   cache_l2_memory_bytes
+#
+# Request rate by service:
+#   sum by (service) (rate(http_requests_total[5m]))
+#
+# Error rate:
+#   sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))
+
+# ============================================================================
+# GRAFANA INTEGRATION
+# ============================================================================
+
+# To use with Grafana:
+# 1. Add Prometheus as a data source in Grafana
+#    URL: http://prometheus:9090 (from within docker network)
+#    URL: http://localhost:9090 (from host)
+# 
+# 2. Import pre-built dashboards:
+#    - Redis Dashboard: 11835
+#    - PostgreSQL Dashboard: 9628
+#    - Custom cache metrics dashboard (create or import)
+#
+# 3. Create alerts in Grafana based on Prometheus metrics
+
+# ============================================================================
+# NOTES FOR LINUX USERS
+# ============================================================================
+
+# Docker on Linux does not support host.docker.internal by default.
+# Replace 'host.docker.internal' with one of:
+#
+# 1. Use host network mode in docker-compose (not recommended for security)
+# 2. Use the Docker bridge gateway IP: 172.17.0.1
+# 3. Use the container's IP address
+# 4. Add this to docker-compose.yml:
+#
+#    extra_hosts:
+#      - "host.docker.internal:host-gateway"
+#
+# Then the configuration above will work as-is.
