@@ -1,37 +1,221 @@
-/.encore
-encore.gen.go
-encore.gen.cue
-/encore.gen
+# ============================================================================
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.production.local
 
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# Keep example files
+!.env.example
+!.env.development
+!.env.production
+
+# ============================================================================
+# SECRETS & CREDENTIALS
+# ============================================================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+*.secret
+
+# ============================================================================
+# BACKEND (Go/Encore)
+# ============================================================================
+# Binaries
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+bin/
+dist/
 
-# Test binary, built with `go test -c`
-*.test
-
-# Code coverage profiles and other test artifacts
+# Test coverage
 *.out
-coverage.*
-*.coverprofile
-profile.cov
+coverage.txt
+coverage.html
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
+# Go workspace
 go.work
 go.work.sum
 
-# env file
-.env
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# Encore local data
+.encore/
+
+# ============================================================================
+# FRONTEND (React/Vite)
+# ============================================================================
+frontend/dashboard/node_modules/
+frontend/dashboard/dist/
+frontend/dashboard/.vite/
+frontend/dashboard/build/
+
+# Frontend environment files
+frontend/dashboard/.env
+frontend/dashboard/.env.local
+frontend/dashboard/.env.*.local
+
+# Logs
+frontend/dashboard/*.log
+frontend/dashboard/npm-debug.log*
+frontend/dashboard/yarn-debug.log*
+frontend/dashboard/yarn-error.log*
+frontend/dashboard/pnpm-debug.log*
+frontend/dashboard/lerna-debug.log*
+
+# Testing
+frontend/dashboard/coverage/
+
+# Editor directories
+frontend/dashboard/.vscode/*
+!frontend/dashboard/.vscode/extensions.json
+frontend/dashboard/.idea/
+frontend/dashboard/*.suo
+frontend/dashboard/*.ntvs*
+frontend/dashboard/*.njsproj
+frontend/dashboard/*.sln
+frontend/dashboard/*.sw?
+
+# ============================================================================
+# INFRASTRUCTURE
+# ============================================================================
+# Docker
+.dockerignore
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfvars
+infra/terraform/.terraform.lock.hcl
+
+# Kubernetes secrets
+infra/k8s/*-secret.yaml
+infra/k8s/secrets/
+
+# ============================================================================
+# LOGS & DATA
+# ============================================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database dumps
+*.sql
+*.dump
+backups/
+
+# Cache files
+.cache/
+cache/
+
+# ============================================================================
+# OPERATING SYSTEM
+# ============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================================================
+# TEMPORARY FILES
+# ============================================================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+
+# ============================================================================
+# BUILD ARTIFACTS
+# ============================================================================
+build/
+dist/
+out/
+target/
+
+# ============================================================================
+# MONITORING & PROFILING
+# ============================================================================
+*.prof
+*.pprof
+*.trace
+
+# ============================================================================
+# DOCUMENTATION BUILD
+# ============================================================================
+docs/_build/
+docs/.doctrees/
+site/
+
+# ============================================================================
+# PACKAGE MANAGERS
+# ============================================================================
+node_modules/
+vendor/
+.pnp
+.pnp.js
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# ============================================================================
+# TESTING
+# ============================================================================
+.nyc_output/
+coverage/
+*.cover
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ============================================================================
+# MISC
+# ============================================================================
+.netlify/
+.vercel/
+.turbo/
+.parcel-cache/
+
+# Debug
+debug/
+__debug_bin
+
+# Local development overrides
+docker-compose.override.yml
+encore.gen.go
+encore.gen.cue
+/.encore
+/encore.gen
