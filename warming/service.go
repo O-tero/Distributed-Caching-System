@@ -158,7 +158,21 @@ type MetricsSnapshot struct {
 }
 
 type ConfigResponse struct {
-	Config Config `json:"config"`
+	Config ConfigView `json:"config"`
+}
+
+// ConfigView is a schema-safe representation of Config for APIs.
+// (Encore schema types must not include time.Duration.)
+type ConfigView struct {
+	MaxOriginRPS       int    `json:"max_origin_rps"`
+	MaxBatchSize       int    `json:"max_batch_size"`
+	ConcurrentWarmers  int    `json:"concurrent_warmers"`
+	DefaultTTL         string `json:"default_ttl"`
+	OriginTimeout      string `json:"origin_timeout"`
+	RetryAttempts      int    `json:"retry_attempts"`
+	BackoffBase        string `json:"backoff_base"`
+	EmergencyThreshold string `json:"emergency_threshold"`
+	DefaultStrategy    string `json:"default_strategy"`
 }
 
 type UpdateConfigRequest struct {
@@ -460,7 +474,7 @@ func (s *Service) GetConfig(ctx context.Context) (*ConfigResponse, error) {
 	defer s.mu.RUnlock()
 
 	return &ConfigResponse{
-		Config: s.config,
+		Config: configToView(s.config),
 	}, nil
 }
 
@@ -501,8 +515,22 @@ func (s *Service) UpdateConfig(ctx context.Context, req *UpdateConfigRequest) (*
 	}
 
 	return &ConfigResponse{
-		Config: s.config,
+		Config: configToView(s.config),
 	}, nil
+}
+
+func configToView(c Config) ConfigView {
+	return ConfigView{
+		MaxOriginRPS:       c.MaxOriginRPS,
+		MaxBatchSize:       c.MaxBatchSize,
+		ConcurrentWarmers:  c.ConcurrentWarmers,
+		DefaultTTL:         c.DefaultTTL.String(),
+		OriginTimeout:      c.OriginTimeout.String(),
+		RetryAttempts:      c.RetryAttempts,
+		BackoffBase:        c.BackoffBase.String(),
+		EmergencyThreshold: c.EmergencyThreshold.String(),
+		DefaultStrategy:    c.DefaultStrategy,
+	}
 }
 
 // Helper functions
