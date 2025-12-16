@@ -2,36 +2,24 @@ package cachemanager
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"encore.dev/pubsub"
-)
 
-// InvalidateEvent represents a cache invalidation broadcast to all instances.
-type InvalidateEvent struct {
-	Keys      []string  `json:"keys"`      // Specific keys to invalidate
-	Pattern   string    `json:"pattern"`   // Pattern for wildcard invalidation (e.g., "user:*")
-	Timestamp time.Time `json:"timestamp"` // When invalidation was triggered
-	Source    string    `json:"source"`    // Which instance triggered invalidation
-}
+	"encore.app/invalidation"
+)
 
 // RefreshEvent represents a cache refresh command broadcast to all instances.
 type RefreshEvent struct {
-	Key       string      `json:"key"`        // Key to refresh
-	Value     interface{} `json:"value"`      // New value to cache
-	TTL       int         `json:"ttl"`        // TTL in seconds
-	Timestamp time.Time   `json:"timestamp"`  // When refresh was triggered
-	Priority  string      `json:"priority"`   // "critical", "high", "normal"
+	Key       string          `json:"key"`        // Key to refresh
+	Value     json.RawMessage `json:"value"`      // New value to cache (JSON)
+	TTL       int             `json:"ttl"`        // TTL in seconds
+	Timestamp time.Time       `json:"timestamp"`  // When refresh was triggered
+	Priority  string          `json:"priority"`   // "critical", "high", "normal"
 }
 
 // Pub/Sub topic definitions for cache coordination.
-var CacheInvalidateTopic = pubsub.NewTopic[*InvalidateEvent](
-	"cache-invalidate",
-	pubsub.TopicConfig{
-		DeliveryGuarantee: pubsub.AtLeastOnce,
-	},
-)
-
 var CacheRefreshTopic = pubsub.NewTopic[*RefreshEvent](
 	"cache-refresh",
 	pubsub.TopicConfig{
@@ -42,27 +30,27 @@ var CacheRefreshTopic = pubsub.NewTopic[*RefreshEvent](
 // Subscribe to cache invalidation events from other instances.
 // This ensures eventual consistency across all cache-manager instances.
 var _ = pubsub.NewSubscription(
-	CacheInvalidateTopic,
+	invalidation.CacheInvalidateTopic,
 	"cache-manager-invalidate",
-	pubsub.SubscriptionConfig[*InvalidateEvent]{
+	pubsub.SubscriptionConfig[*invalidation.InvalidationEvent]{
 		Handler: HandleInvalidateEvent,
 	},
 )
 
 // HandleInvalidateEvent processes invalidation events from other cache instances.
 // This handler is triggered when any instance publishes an invalidation event.
-func HandleInvalidateEvent(ctx context.Context, event *InvalidateEvent) error {
+func HandleInvalidateEvent(ctx context.Context, event *invalidation.InvalidationEvent) error {
 	if svc == nil {
 		return nil // Service not initialized yet
 	}
 
-	// Invalidate specific keys
-	for _, key := range event.Keys {
+	// Invalidate specific keys (preferred)
+	for _, key := range event.MatchedKeys {
 		svc.l1Cache.Delete(key)
 		svc.metrics.Deletes.Add(1)
 	}
 
-	// Invalidate by pattern
+	// Invalidate by pattern (fallback)
 	if event.Pattern != "" {
 		deleted := svc.l1Cache.DeletePattern(event.Pattern)
 		svc.metrics.Deletes.Add(int64(deleted))
@@ -112,18 +100,19 @@ func HandleRefreshEvent(ctx context.Context, event *RefreshEvent) error {
 // PublishInvalidation publishes an invalidation event to all instances.
 // This is called internally after local invalidation to coordinate with other nodes.
 func (s *Service) PublishInvalidation(ctx context.Context, keys []string, pattern string) error {
-	event := &InvalidateEvent{
-		Keys:      keys,
-		Pattern:   pattern,
-		Timestamp: time.Now(),
-		Source:    "cache-manager", // Could be instance ID in production
+	event := &invalidation.InvalidationEvent{
+		Pattern:     pattern,
+		MatchedKeys: keys,
+		TriggeredBy: "cache_manager",
+		Timestamp:   time.Now(),
+		RequestID:   "",
 	}
-	_, err := CacheInvalidateTopic.Publish(ctx, event)
+	_, err := invalidation.CacheInvalidateTopic.Publish(ctx, event)
 	return err
 }
 // PublishRefresh publishes a refresh event to all instances.
 // This is called by warming service to proactively populate caches.
-func (s *Service) PublishRefresh(ctx context.Context, key string, value interface{}, ttl int) error {
+func (s *Service) PublishRefresh(ctx context.Context, key string, value json.RawMessage, ttl int) error {
 	event := &RefreshEvent{
 		Key:       key,
 		Value:     value,

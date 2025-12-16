@@ -2,13 +2,34 @@ package cachemanager
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"encore.app/invalidation"
 )
+
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("failed to marshal json: %v", err)
+	}
+	return b
+}
+
+func mustJSONString(t *testing.T, raw json.RawMessage) string {
+	t.Helper()
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		t.Fatalf("failed to unmarshal json string: %v (raw=%s)", err, string(raw))
+	}
+	return s
+}
 
 // MockOriginFetcher simulates fetching from source of truth.
 type MockOriginFetcher struct {
@@ -93,9 +114,9 @@ func NewMockRemoteCache() *MockRemoteCache {
 func (m *MockRemoteCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	m.calls["get"]++
-	
+
 	val, exists := m.data[key]
 	return val, exists, nil
 }
@@ -103,7 +124,7 @@ func (m *MockRemoteCache) Get(ctx context.Context, key string) ([]byte, bool, er
 func (m *MockRemoteCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.calls["set"]++
 	m.data[key] = value
 	return nil
@@ -112,7 +133,7 @@ func (m *MockRemoteCache) Set(ctx context.Context, key string, value []byte, ttl
 func (m *MockRemoteCache) Delete(ctx context.Context, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.calls["delete"]++
 	delete(m.data, key)
 	return nil
@@ -121,7 +142,7 @@ func (m *MockRemoteCache) Delete(ctx context.Context, key string) error {
 func (m *MockRemoteCache) DeletePattern(ctx context.Context, pattern string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.calls["delete_pattern"]++
 	// Simple pattern matching for tests
 	for key := range m.data {
@@ -157,7 +178,6 @@ func setupTestService() (*Service, *MockOriginFetcher, *MockRemoteCache) {
 		coalescer:   NewRequestCoalescer(),
 		metrics:     &Metrics{},
 		config:      config,
-		stopChan:    make(chan struct{}),
 	}
 
 	return svc, mockOrigin, mockL2
@@ -167,9 +187,9 @@ func TestL1Cache_BasicOperations(t *testing.T) {
 	cache := NewL1Cache(100)
 
 	// Test Set and Get
-	cache.Set("key1", "value1", 1*time.Hour)
+	cache.Set("key1", mustJSON(t, "value1"), 1*time.Hour)
 	entry, ok := cache.Get("key1")
-	if !ok || entry.Value != "value1" {
+	if !ok || mustJSONString(t, entry.Value) != "value1" {
 		t.Errorf("Expected value1, got %v, ok=%v", entry, ok)
 	}
 
@@ -193,8 +213,8 @@ func TestL1Cache_TTLExpiration(t *testing.T) {
 	cache := NewL1Cache(100)
 
 	// Set with short TTL
-	cache.Set("key1", "value1", 50*time.Millisecond)
-	
+	cache.Set("key1", mustJSON(t, "value1"), 50*time.Millisecond)
+
 	// Should be available immediately
 	_, ok := cache.Get("key1")
 	if !ok {
@@ -215,15 +235,15 @@ func TestL1Cache_LRUEviction(t *testing.T) {
 	cache := NewL1Cache(3) // Small capacity for testing
 
 	// Fill cache
-	cache.Set("key1", "value1", 1*time.Hour)
-	cache.Set("key2", "value2", 1*time.Hour)
-	cache.Set("key3", "value3", 1*time.Hour)
+	cache.Set("key1", mustJSON(t, "value1"), 1*time.Hour)
+	cache.Set("key2", mustJSON(t, "value2"), 1*time.Hour)
+	cache.Set("key3", mustJSON(t, "value3"), 1*time.Hour)
 
 	// Access key1 to make it recently used
 	cache.Get("key1")
 
 	// Add new key, should evict key2 (least recently used)
-	cache.Set("key4", "value4", 1*time.Hour)
+	cache.Set("key4", mustJSON(t, "value4"), 1*time.Hour)
 
 	// key1 and key3 should still exist
 	if _, ok := cache.Get("key1"); !ok {
@@ -243,10 +263,10 @@ func TestL1Cache_PatternDelete(t *testing.T) {
 	cache := NewL1Cache(100)
 
 	// Set multiple keys with pattern
-	cache.Set("user:1:profile", "profile1", 1*time.Hour)
-	cache.Set("user:1:settings", "settings1", 1*time.Hour)
-	cache.Set("user:2:profile", "profile2", 1*time.Hour)
-	cache.Set("product:1", "product1", 1*time.Hour)
+	cache.Set("user:1:profile", mustJSON(t, "profile1"), 1*time.Hour)
+	cache.Set("user:1:settings", mustJSON(t, "settings1"), 1*time.Hour)
+	cache.Set("user:2:profile", mustJSON(t, "profile2"), 1*time.Hour)
+	cache.Set("product:1", mustJSON(t, "product1"), 1*time.Hour)
 
 	// Delete by pattern
 	deleted := cache.DeletePattern("user:1:*")
@@ -273,9 +293,9 @@ func TestL1Cache_CleanupExpired(t *testing.T) {
 	cache := NewL1Cache(100)
 
 	// Set keys with different TTLs
-	cache.Set("key1", "value1", 50*time.Millisecond)
-	cache.Set("key2", "value2", 200*time.Millisecond)
-	cache.Set("key3", "value3", 1*time.Hour)
+	cache.Set("key1", mustJSON(t, "value1"), 50*time.Millisecond)
+	cache.Set("key2", mustJSON(t, "value2"), 200*time.Millisecond)
+	cache.Set("key3", mustJSON(t, "value3"), 1*time.Hour)
 
 	// Wait for key1 to expire
 	time.Sleep(100 * time.Millisecond)
@@ -302,7 +322,7 @@ func TestService_Get_L1Hit(t *testing.T) {
 	svc, _, _ := setupTestService()
 
 	// Pre-populate L1 cache
-	svc.l1Cache.Set("key1", "value1", 1*time.Hour)
+	svc.l1Cache.Set("key1", mustJSON(t, "value1"), 1*time.Hour)
 
 	// Get should hit L1
 	resp, err := svc.Get(context.Background(), "key1")
@@ -310,7 +330,7 @@ func TestService_Get_L1Hit(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if !resp.Hit || resp.Source != "l1" || resp.Value != "value1" {
+	if !resp.Hit || resp.Source != "l1" || mustJSONString(t, resp.Value) != "value1" {
 		t.Errorf("Expected L1 hit with value1, got %+v", resp)
 	}
 
@@ -332,7 +352,7 @@ func TestService_Get_OriginFetch(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if !resp.Hit || resp.Source != "origin" || resp.Value != "origin_value" {
+	if !resp.Hit || resp.Source != "origin" || mustJSONString(t, resp.Value) != "origin_value" {
 		t.Errorf("Expected origin fetch with origin_value, got %+v", resp)
 	}
 
@@ -357,7 +377,7 @@ func TestService_Set(t *testing.T) {
 
 	req := &SetRequest{
 		Key:   "key1",
-		Value: "value1",
+		Value: mustJSON(t, "value1"),
 		TTL:   3600,
 	}
 
@@ -372,7 +392,7 @@ func TestService_Set(t *testing.T) {
 
 	// Verify L1 contains value
 	entry, ok := svc.l1Cache.Get("key1")
-	if !ok || entry.Value != "value1" {
+	if !ok || mustJSONString(t, entry.Value) != "value1" {
 		t.Errorf("L1 should contain value1, got %v", entry)
 	}
 
@@ -394,8 +414,8 @@ func TestService_Invalidate_Keys(t *testing.T) {
 	svc, _, mockL2 := setupTestService()
 
 	// Set up some cached data
-	svc.l1Cache.Set("key1", "value1", 1*time.Hour)
-	svc.l1Cache.Set("key2", "value2", 1*time.Hour)
+	svc.l1Cache.Set("key1", mustJSON(t, "value1"), 1*time.Hour)
+	svc.l1Cache.Set("key2", mustJSON(t, "value2"), 1*time.Hour)
 
 	req := &InvalidateRequest{
 		Keys: []string{"key1"},
@@ -428,9 +448,9 @@ func TestService_Invalidate_Pattern(t *testing.T) {
 	svc, _, _ := setupTestService()
 
 	// Set up cached data with pattern
-	svc.l1Cache.Set("user:1:profile", "profile1", 1*time.Hour)
-	svc.l1Cache.Set("user:1:settings", "settings1", 1*time.Hour)
-	svc.l1Cache.Set("user:2:profile", "profile2", 1*time.Hour)
+	svc.l1Cache.Set("user:1:profile", mustJSON(t, "profile1"), 1*time.Hour)
+	svc.l1Cache.Set("user:1:settings", mustJSON(t, "settings1"), 1*time.Hour)
+	svc.l1Cache.Set("user:2:profile", mustJSON(t, "profile2"), 1*time.Hour)
 
 	req := &InvalidateRequest{
 		Pattern: "user:1:*",
@@ -459,10 +479,10 @@ func TestService_Metrics(t *testing.T) {
 
 	// Perform various operations
 	mockOrigin.Set("key1", "value1")
-	
-	svc.Get(context.Background(), "key1")          // miss + origin
-	svc.Get(context.Background(), "key1")          // hit
-	svc.Set(context.Background(), "key2", &SetRequest{Key: "key2", Value: "value2"})
+
+	svc.Get(context.Background(), "key1") // miss + origin
+	svc.Get(context.Background(), "key1") // hit
+	svc.Set(context.Background(), "key2", &SetRequest{Key: "key2", Value: mustJSON(t, "value2")})
 	svc.Invalidate(context.Background(), &InvalidateRequest{Keys: []string{"key1"}})
 
 	// Get metrics
@@ -590,15 +610,15 @@ func TestRequestCoalescer_DifferentKeys(t *testing.T) {
 
 func TestHandleInvalidateEvent(t *testing.T) {
 	svc, _, _ := setupTestService()
-	
+
 	// Set up initial data
-	svc.l1Cache.Set("key1", "value1", 1*time.Hour)
-	svc.l1Cache.Set("key2", "value2", 1*time.Hour)
+	svc.l1Cache.Set("key1", mustJSON(t, "value1"), 1*time.Hour)
+	svc.l1Cache.Set("key2", mustJSON(t, "value2"), 1*time.Hour)
 
 	// Simulate invalidation event
-	event := &InvalidateEvent{
-		Keys:      []string{"key1"},
-		Timestamp: time.Now(),
+	event := &invalidation.InvalidationEvent{
+		MatchedKeys: []string{"key1"},
+		Timestamp:   time.Now(),
 	}
 
 	err := HandleInvalidateEvent(context.Background(), event)
@@ -623,7 +643,7 @@ func TestHandleRefreshEvent(t *testing.T) {
 	// Simulate refresh event
 	event := &RefreshEvent{
 		Key:       "key1",
-		Value:     "fresh_value",
+		Value:     mustJSON(t, "fresh_value"),
 		TTL:       3600,
 		Timestamp: time.Now(),
 		Priority:  "high",
@@ -636,7 +656,7 @@ func TestHandleRefreshEvent(t *testing.T) {
 
 	// Verify key1 populated in L1
 	entry, ok := svc.l1Cache.Get("key1")
-	if !ok || entry.Value != "fresh_value" {
+	if !ok || mustJSONString(t, entry.Value) != "fresh_value" {
 		t.Errorf("Expected fresh_value in L1, got %v", entry)
 	}
 }
@@ -672,7 +692,7 @@ func TestConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			_, err := svc.Set(context.Background(), fmt.Sprintf("key%d", i), &SetRequest{
 				Key:   fmt.Sprintf("key%d", i),
-				Value: fmt.Sprintf("new_value%d", i),
+				Value: mustJSON(t, fmt.Sprintf("new_value%d", i)),
 			})
 			if err != nil {
 				errors <- err
@@ -699,7 +719,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 	// Check for errors
 	for err := range errors {
-t.Errorf("Concurrent operation error: %v", err)
+		t.Errorf("Concurrent operation error: %v", err)
 	}
 
 	// Verify service is still functional
@@ -727,7 +747,6 @@ func TestTTLCleanup_Background(t *testing.T) {
 		coalescer:   NewRequestCoalescer(),
 		metrics:     &Metrics{},
 		config:      config,
-		stopChan:    make(chan struct{}),
 	}
 
 	// Start background cleanup
@@ -735,9 +754,9 @@ func TestTTLCleanup_Background(t *testing.T) {
 	go svc.runTTLCleanup()
 
 	// Add entries with short TTL
-	svc.l1Cache.Set("expire1", "val1", 100*time.Millisecond)
-	svc.l1Cache.Set("expire2", "val2", 100*time.Millisecond)
-	svc.l1Cache.Set("keep", "val3", 1*time.Hour)
+	svc.l1Cache.Set("expire1", mustJSON(t, "val1"), 100*time.Millisecond)
+	svc.l1Cache.Set("expire2", mustJSON(t, "val2"), 100*time.Millisecond)
+	svc.l1Cache.Set("keep", mustJSON(t, "val3"), 1*time.Hour)
 
 	// Wait for cleanup to run
 	time.Sleep(200 * time.Millisecond)
@@ -762,7 +781,7 @@ func TestTTLCleanup_Background(t *testing.T) {
 
 func BenchmarkL1Cache_Get(b *testing.B) {
 	cache := NewL1Cache(10000)
-	cache.Set("key1", "value1", 1*time.Hour)
+	cache.Set("key1", json.RawMessage(`"value1"`), 1*time.Hour)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -774,17 +793,18 @@ func BenchmarkL1Cache_Set(b *testing.B) {
 	cache := NewL1Cache(10000)
 
 	b.ResetTimer()
+	val := json.RawMessage(`"value"`)
 	for i := 0; i < b.N; i++ {
-		cache.Set(fmt.Sprintf("key%d", i), fmt.Sprintf("value%d", i), 1*time.Hour)
+		cache.Set(fmt.Sprintf("key%d", i), val, 1*time.Hour)
 	}
 }
 
 func BenchmarkL1Cache_ConcurrentGet(b *testing.B) {
 	cache := NewL1Cache(10000)
-	
+
 	// Pre-populate
 	for i := 0; i < 1000; i++ {
-		cache.Set(fmt.Sprintf("key%d", i), fmt.Sprintf("value%d", i), 1*time.Hour)
+		cache.Set(fmt.Sprintf("key%d", i), json.RawMessage(`"value"`), 1*time.Hour)
 	}
 
 	b.ResetTimer()
@@ -799,7 +819,7 @@ func BenchmarkL1Cache_ConcurrentGet(b *testing.B) {
 
 func BenchmarkRequestCoalescer(b *testing.B) {
 	coalescer := NewRequestCoalescer()
-	
+
 	fn := func() (interface{}, error) {
 		return "result", nil
 	}
@@ -824,7 +844,7 @@ func TestService_EmptyKey(t *testing.T) {
 	}
 
 	// Test Set with empty key
-	_, err = svc.Set(context.Background(), "", &SetRequest{Value: "value"})
+	_, err = svc.Set(context.Background(), "", &SetRequest{Value: mustJSON(t, "value")})
 	if err == nil {
 		t.Error("Expected error for empty key")
 	}
@@ -847,7 +867,7 @@ func TestService_CustomTTL(t *testing.T) {
 
 	req := &SetRequest{
 		Key:   "key1",
-		Value: "value1",
+		Value: mustJSON(t, "value1"),
 		TTL:   2, // 2 seconds
 	}
 
@@ -871,8 +891,8 @@ func TestL1Cache_Size(t *testing.T) {
 		t.Errorf("Expected size 0, got %d", cache.Size())
 	}
 
-	cache.Set("key1", "value1", 1*time.Hour)
-	cache.Set("key2", "value2", 1*time.Hour)
+	cache.Set("key1", mustJSON(t, "value1"), 1*time.Hour)
+	cache.Set("key2", mustJSON(t, "value2"), 1*time.Hour)
 
 	if cache.Size() != 2 {
 		t.Errorf("Expected size 2, got %d", cache.Size())
@@ -888,8 +908,8 @@ func TestL1Cache_Size(t *testing.T) {
 func TestL1Cache_Clear(t *testing.T) {
 	cache := NewL1Cache(100)
 
-	cache.Set("key1", "value1", 1*time.Hour)
-	cache.Set("key2", "value2", 1*time.Hour)
+	cache.Set("key1", mustJSON(t, "value1"), 1*time.Hour)
+	cache.Set("key2", mustJSON(t, "value2"), 1*time.Hour)
 
 	cache.Clear()
 
@@ -966,7 +986,7 @@ func TestPolicyEngine(t *testing.T) {
 	engine := DefaultPolicyEngine()
 
 	entry := &CacheEntry{
-		Value:     "test",
+		Value:     mustJSON(t, "test"),
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 	}
 
@@ -977,7 +997,7 @@ func TestPolicyEngine(t *testing.T) {
 
 	// Expired entry should be evicted
 	expiredEntry := &CacheEntry{
-		Value:     "test",
+		Value:     mustJSON(t, "test"),
 		ExpiresAt: time.Now().Add(-1 * time.Hour),
 	}
 

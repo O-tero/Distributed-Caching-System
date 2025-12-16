@@ -30,19 +30,23 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"encore.app/invalidation"
 )
 
 // Service implements the cache manager with multi-level storage and coordination.
-//encore:service
+//
+// NOTE: Encore treats the service type as part of its schema graph.
+// Channel types are not allowed in schema definitions, so stop coordination is kept
+// at package scope rather than as a field on Service.
 type Service struct {
-	l1Cache      *L1Cache
-	l2Cache      RemoteCache
-	originFetch  OriginFetcher
-	coalescer    *RequestCoalescer
-	metrics      *Metrics
-	config       Config
-	stopChan     chan struct{}
-	wg           sync.WaitGroup
+	l1Cache     *L1Cache
+	l2Cache     RemoteCache
+	originFetch OriginFetcher
+	coalescer   *RequestCoalescer
+	metrics     *Metrics
+	config      Config
+	wg          sync.WaitGroup
 }
 
 // Config holds runtime configuration for the cache manager.
@@ -85,17 +89,19 @@ type GetRequest struct {
 }
 
 type GetResponse struct {
-	Value     interface{} `json:"value"`
-	Hit       bool        `json:"hit"`
-	Source    string      `json:"source"` // "l1", "l2", "origin"
-	CachedAt  *time.Time  `json:"cached_at,omitempty"`
-	ExpiresAt *time.Time  `json:"expires_at,omitempty"`
+	// Value is JSON-encoded.
+	Value     json.RawMessage `json:"value"`
+	Hit       bool            `json:"hit"`
+	Source    string          `json:"source"` // "l1", "l2", "origin"
+	CachedAt  *time.Time      `json:"cached_at,omitempty"`
+	ExpiresAt *time.Time      `json:"expires_at,omitempty"`
 }
 
 type SetRequest struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
-	TTL   int         `json:"ttl"` // seconds, 0 means default
+	Key   string          `json:"key"`
+	// Value is JSON-encoded.
+	Value json.RawMessage `json:"value"`
+	TTL   int             `json:"ttl"` // seconds, 0 means default
 }
 
 type SetResponse struct {
@@ -130,6 +136,10 @@ var (
 	// Global service instance (initialized by initService)
 	svc *Service
 	once sync.Once
+
+	// stopChan is used to stop background goroutines.
+	// Kept out of Service to avoid channel types in Encore's schema graph.
+	stopChan chan struct{}
 )
 
 // initService initializes the cache manager service with default configuration.
@@ -144,6 +154,7 @@ func initService() (*Service, error) {
 			L2Enabled:      false, // Disabled by default for unit tests
 		}
 
+		stopChan = make(chan struct{})
 		svc = &Service{
 			l1Cache:     NewL1Cache(config.L1MaxEntries),
 			l2Cache:     nil, // Must be set via SetL2Cache for production
@@ -151,7 +162,6 @@ func initService() (*Service, error) {
 			coalescer:   NewRequestCoalescer(),
 			metrics:     &Metrics{},
 			config:      config,
-			stopChan:    make(chan struct{}),
 		}
 
 		// Start background cleanup goroutine
@@ -175,7 +185,7 @@ func (s *Service) SetOriginFetcher(fetcher OriginFetcher) {
 
 // Get retrieves a value from cache with read-through to L2 and origin.
 // Complexity: O(1) average for L1 hit, O(1) + network for L2, O(1) + network + origin for miss.
-//encore:api public method=GET path=/api/cache/:key
+//encore:api public method=GET path=/api/cache/entry/:key
 func Get(ctx context.Context, key string) (*GetResponse, error) {
 	if svc == nil {
 		return nil, errors.New("service not initialized")
@@ -256,14 +266,19 @@ func (s *Service) fetchWithFallback(ctx context.Context, key string) (*CacheEntr
 		return nil, fmt.Errorf("origin fetch failed: %w", err)
 	}
 
+	valueJSON, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal origin value: %w", err)
+	}
+
 	// Populate both cache levels
 	ttl := s.config.DefaultTTL
 	expiresAt := time.Now().Add(ttl)
-	
-	s.l1Cache.Set(key, value, ttl)
-	
+
+	s.l1Cache.Set(key, valueJSON, ttl)
+
 	entry := &CacheEntry{
-		Value:     value,
+		Value:     valueJSON,
 		CachedAt:  time.Now(),
 		ExpiresAt: expiresAt,
 		Source:    "origin",
@@ -282,7 +297,7 @@ func (s *Service) fetchWithFallback(ctx context.Context, key string) (*CacheEntr
 
 // Set stores a value in cache with write-through to L2.
 // Complexity: O(1) for L1 + O(1) + network for L2.
-//encore:api public method=PUT path=/api/cache/:key
+//encore:api public method=PUT path=/api/cache/entry/:key
 func Set(ctx context.Context, key string, req *SetRequest) (*SetResponse, error) {
 	if svc == nil {
 		return nil, errors.New("service not initialized")
@@ -294,8 +309,8 @@ func (s *Service) Set(ctx context.Context, key string, req *SetRequest) (*SetRes
 	if key == "" {
 		return nil, errors.New("key cannot be empty")
 	}
-	if req.Value == nil {
-		return nil, errors.New("value cannot be nil")
+	if len(req.Value) == 0 {
+		return nil, errors.New("value cannot be empty")
 	}
 
 	ttl := s.config.DefaultTTL
@@ -368,12 +383,14 @@ func (s *Service) Invalidate(ctx context.Context, req *InvalidateRequest) (*Inva
 
 	// Publish invalidation event for distributed coordination
 	if count > 0 {
-		event := &InvalidateEvent{
-			Keys:      req.Keys,
-			Pattern:   req.Pattern,
-			Timestamp: time.Now(),
+		event := &invalidation.InvalidationEvent{
+			Pattern:     req.Pattern,
+			MatchedKeys: req.Keys,
+			TriggeredBy: "cache_manager",
+			Timestamp:   time.Now(),
+			RequestID:   "",
 		}
-		_, _ = CacheInvalidateTopic.Publish(ctx, event)
+		_, _ = invalidation.CacheInvalidateTopic.Publish(ctx, event)
 	}
 
 	return &InvalidateResponse{
@@ -423,7 +440,7 @@ func (s *Service) runTTLCleanup() {
 
 	for {
 		select {
-		case <-s.stopChan:
+		case <-stopChan:
 			return
 		case <-ticker.C:
 			evicted := s.l1Cache.CleanupExpired()
@@ -434,6 +451,14 @@ func (s *Service) runTTLCleanup() {
 
 // Shutdown gracefully stops the service.
 func (s *Service) Shutdown() {
-	close(s.stopChan)
+	// Avoid panic if Shutdown is called before init or multiple times.
+	if stopChan != nil {
+		select {
+		case <-stopChan:
+			// already closed
+		default:
+			close(stopChan)
+		}
+	}
 	s.wg.Wait()
 }

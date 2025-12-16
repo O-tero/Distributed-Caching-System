@@ -2,21 +2,22 @@ package cachemanager
 
 import (
 	"container/list"
+	"encoding/json"
 	"strings"
 	"sync"
 	"time"
 )
 
 type CacheEntry struct {
-	Value     interface{} `json:"value"`
-	CachedAt  time.Time   `json:"cached_at"`
-	ExpiresAt time.Time   `json:"expires_at"`
-	Source    string      `json:"source"` // "l1", "l2", "origin"
+	Value     json.RawMessage `json:"value"`
+	CachedAt  time.Time       `json:"cached_at"`
+	ExpiresAt time.Time       `json:"expires_at"`
+	Source    string          `json:"source"` // "l1", "l2", "origin"
 }
 
 type lruEntry struct {
 	key       string
-	value     interface{}
+	value     json.RawMessage
 	expiresAt time.Time
 	element   *list.Element // pointer to list element for O(1) removal
 }
@@ -76,7 +77,7 @@ func (c *L1Cache) Get(key string) (*CacheEntry, bool) {
 
 // Set stores a value in L1 cache with TTL, evicting LRU entry if at capacity.
 // Complexity: O(1).
-func (c *L1Cache) Set(key string, value interface{}, ttl time.Duration) {
+func (c *L1Cache) Set(key string, value json.RawMessage, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
