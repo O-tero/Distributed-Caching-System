@@ -31,24 +31,31 @@ type Dashboard struct {
 
 	// Active streaming sessions
 	mu       sync.RWMutex
-	sessions map[string]*StreamSession
+	sessions map[string]*streamSession
 }
 
-// StreamSession represents an active real-time streaming session.
+// StreamSession is a schema-safe representation of a streaming session.
+// (Encore schema types must not include channels.)
 type StreamSession struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// streamSession represents an active real-time streaming session (internal).
+type streamSession struct {
 	ID        string
-	Updates   chan DashboardUpdate
-	StopChan  chan struct{}
+	updates   chan DashboardUpdate
+	stopChan  chan struct{}
 	CreatedAt time.Time
 	LastPing  time.Time
 }
 
 // DashboardUpdate represents a real-time update for streaming.
 type DashboardUpdate struct {
-	Timestamp time.Time               `json:"timestamp"`
-	Metrics   *GetMetricsResponse     `json:"metrics"`
-	Alerts    []Alert                 `json:"alerts,omitempty"`
-	Anomalies []Anomaly               `json:"anomalies,omitempty"`
+	Timestamp time.Time           `json:"timestamp"`
+	Metrics   *GetMetricsResponse `json:"metrics"`
+	Alerts    []Alert             `json:"alerts,omitempty"`
+	Anomalies []Anomaly           `json:"anomalies,omitempty"`
 }
 
 // NewDashboard creates a new dashboard instance.
@@ -60,62 +67,63 @@ func NewDashboard(aggregator *Aggregator, collector *MetricsCollector, alertMgr 
 		collector:  collector,
 		alertMgr:   alertMgr,
 		detector:   detector,
-		sessions:   make(map[string]*StreamSession),
+		sessions:   make(map[string]*streamSession),
 	}
 }
 
 // Request and response types for dashboard endpoints
 
 type GetOverviewRequest struct {
-	TimeRange time.Duration `json:"time_range"` // e.g., 1h, 24h, 7d
+	// TimeRange is a duration string (e.g. "1h", "24h", "7d" (note: time.ParseDuration doesn't support 'd' unless custom)).
+	TimeRange string `json:"time_range"`
 }
 
 type GetOverviewResponse struct {
-	Summary       SummaryStats          `json:"summary"`
-	Timeline      []TimelinePoint       `json:"timeline"`
-	TopKeys       []KeyStats            `json:"top_keys"`
-	SystemHealth  SystemHealth          `json:"system_health"`
-	RecentAlerts  []Alert               `json:"recent_alerts"`
-	RecentAnomalies []Anomaly           `json:"recent_anomalies"`
+	Summary         SummaryStats    `json:"summary"`
+	Timeline        []TimelinePoint `json:"timeline"`
+	TopKeys         []KeyStats      `json:"top_keys"`
+	SystemHealth    SystemHealth    `json:"system_health"`
+	RecentAlerts    []Alert         `json:"recent_alerts"`
+	RecentAnomalies []Anomaly       `json:"recent_anomalies"`
 }
 
 type SummaryStats struct {
-	TotalRequests    int64   `json:"total_requests"`
-	HitRate          float64 `json:"hit_rate"`
-	AvgLatency       float64 `json:"avg_latency_ms"`
-	P95Latency       float64 `json:"p95_latency_ms"`
-	ErrorRate        float64 `json:"error_rate"`
-	QPS              float64 `json:"qps"`
-	TrendHitRate     string  `json:"trend_hit_rate"`     // "up", "down", "stable"
-	TrendLatency     string  `json:"trend_latency"`      // "up", "down", "stable"
-	TrendQPS         string  `json:"trend_qps"`          // "up", "down", "stable"
+	TotalRequests int64   `json:"total_requests"`
+	HitRate       float64 `json:"hit_rate"`
+	AvgLatency    float64 `json:"avg_latency_ms"`
+	P95Latency    float64 `json:"p95_latency_ms"`
+	ErrorRate     float64 `json:"error_rate"`
+	QPS           float64 `json:"qps"`
+	TrendHitRate  string  `json:"trend_hit_rate"` // "up", "down", "stable"
+	TrendLatency  string  `json:"trend_latency"`  // "up", "down", "stable"
+	TrendQPS      string  `json:"trend_qps"`      // "up", "down", "stable"
 }
 
 type TimelinePoint struct {
-	Timestamp    time.Time `json:"timestamp"`
-	Requests     int64     `json:"requests"`
-	HitRate      float64   `json:"hit_rate"`
-	AvgLatency   float64   `json:"avg_latency_ms"`
-	P50Latency   float64   `json:"p50_latency_ms"`
-	P95Latency   float64   `json:"p95_latency_ms"`
-	P99Latency   float64   `json:"p99_latency_ms"`
-	ErrorRate    float64   `json:"error_rate"`
-	QPS          float64   `json:"qps"`
+	Timestamp  time.Time `json:"timestamp"`
+	Requests   int64     `json:"requests"`
+	HitRate    float64   `json:"hit_rate"`
+	AvgLatency float64   `json:"avg_latency_ms"`
+	P50Latency float64   `json:"p50_latency_ms"`
+	P95Latency float64   `json:"p95_latency_ms"`
+	P99Latency float64   `json:"p99_latency_ms"`
+	ErrorRate  float64   `json:"error_rate"`
+	QPS        float64   `json:"qps"`
 }
 
 type KeyStats struct {
-	Key           string  `json:"key"`
-	AccessCount   int64   `json:"access_count"`
-	HitRate       float64 `json:"hit_rate"`
-	AvgLatency    float64 `json:"avg_latency_ms"`
-	LastAccessed  time.Time `json:"last_accessed"`
+	Key          string    `json:"key"`
+	AccessCount  int64     `json:"access_count"`
+	HitRate      float64   `json:"hit_rate"`
+	AvgLatency   float64   `json:"avg_latency_ms"`
+	LastAccessed time.Time `json:"last_accessed"`
 }
 
 type SystemHealth struct {
-	Status           string  `json:"status"` // "healthy", "degraded", "critical"
-	Score            float64 `json:"score"`  // 0-100
-	Issues           []HealthIssue `json:"issues"`
-	Recommendations  []string `json:"recommendations"`
+	Status          string        `json:"status"` // "healthy", "degraded", "critical"
+	Score           float64       `json:"score"`  // 0-100
+	Issues          []HealthIssue `json:"issues"`
+	Recommendations []string      `json:"recommendations"`
 }
 
 type HealthIssue struct {
@@ -126,7 +134,8 @@ type HealthIssue struct {
 }
 
 type GetLatencyDistributionRequest struct {
-	Window time.Duration `json:"window"`
+	// Window is a duration string (e.g. "5m").
+	Window string `json:"window"`
 }
 
 type GetLatencyDistributionResponse struct {
@@ -135,9 +144,9 @@ type GetLatencyDistributionResponse struct {
 }
 
 type LatencyBucket struct {
-	MinMs  float64 `json:"min_ms"`
-	MaxMs  float64 `json:"max_ms"`
-	Count  int     `json:"count"`
+	MinMs   float64 `json:"min_ms"`
+	MaxMs   float64 `json:"max_ms"`
+	Count   int     `json:"count"`
 	Percent float64 `json:"percent"`
 }
 
@@ -148,21 +157,21 @@ type GetHeatmapRequest struct {
 }
 
 type GetHeatmapResponse struct {
-	Data      [][]HeatmapCell `json:"data"`
-	XLabels   []string        `json:"x_labels"` // Time labels
-	YLabels   []string        `json:"y_labels"` // Metric range labels
-	ColorScale ColorScale     `json:"color_scale"`
+	Data       [][]HeatmapCell `json:"data"`
+	XLabels    []string        `json:"x_labels"` // Time labels
+	YLabels    []string        `json:"y_labels"` // Metric range labels
+	ColorScale ColorScale      `json:"color_scale"`
 }
 
 type HeatmapCell struct {
-	Value    float64 `json:"value"`
-	Color    string  `json:"color"`
-	Tooltip  string  `json:"tooltip"`
+	Value   float64 `json:"value"`
+	Color   string  `json:"color"`
+	Tooltip string  `json:"tooltip"`
 }
 
 type ColorScale struct {
-	Min   float64 `json:"min"`
-	Max   float64 `json:"max"`
+	Min    float64  `json:"min"`
+	Max    float64  `json:"max"`
 	Colors []string `json:"colors"`
 }
 
@@ -174,19 +183,19 @@ type GetComparisonRequest struct {
 }
 
 type GetComparisonResponse struct {
-	Period1      ComparisonPeriod `json:"period1"`
-	Period2      ComparisonPeriod `json:"period2"`
-	Differences  DifferenceStats  `json:"differences"`
+	Period1     ComparisonPeriod `json:"period1"`
+	Period2     ComparisonPeriod `json:"period2"`
+	Differences DifferenceStats  `json:"differences"`
 }
 
 type ComparisonPeriod struct {
-	Label        string  `json:"label"`
+	Label         string  `json:"label"`
 	TotalRequests int64   `json:"total_requests"`
-	HitRate      float64 `json:"hit_rate"`
-	AvgLatency   float64 `json:"avg_latency_ms"`
-	P95Latency   float64 `json:"p95_latency_ms"`
-	ErrorRate    float64 `json:"error_rate"`
-	QPS          float64 `json:"qps"`
+	HitRate       float64 `json:"hit_rate"`
+	AvgLatency    float64 `json:"avg_latency_ms"`
+	P95Latency    float64 `json:"p95_latency_ms"`
+	ErrorRate     float64 `json:"error_rate"`
+	QPS           float64 `json:"qps"`
 }
 
 type DifferenceStats struct {
@@ -201,6 +210,7 @@ type DifferenceStats struct {
 }
 
 // GetOverview returns a comprehensive dashboard overview.
+//
 //encore:api public method=POST path=/monitoring/dashboard/overview
 func GetOverview(ctx context.Context, req *GetOverviewRequest) (*GetOverviewResponse, error) {
 	if svc == nil || svc.collector == nil {
@@ -212,9 +222,16 @@ func GetOverview(ctx context.Context, req *GetOverviewRequest) (*GetOverviewResp
 }
 
 func (d *Dashboard) GetOverview(ctx context.Context, req *GetOverviewRequest) (*GetOverviewResponse, error) {
-	timeRange := req.TimeRange
-	if timeRange == 0 {
-		timeRange = 1 * time.Hour
+	timeRangeStr := req.TimeRange
+	if timeRangeStr == "" {
+		timeRangeStr = "1h"
+	}
+	timeRange, err := time.ParseDuration(timeRangeStr)
+	if err != nil {
+		return nil, errors.New("invalid time_range duration")
+	}
+	if timeRange <= 0 {
+		return nil, errors.New("time_range must be > 0")
 	}
 
 	now := time.Now()
@@ -268,6 +285,7 @@ func (d *Dashboard) GetOverview(ctx context.Context, req *GetOverviewRequest) (*
 }
 
 // GetLatencyDistribution returns latency distribution histogram.
+//
 //encore:api public method=POST path=/monitoring/dashboard/latency-distribution
 func GetLatencyDistribution(ctx context.Context, req *GetLatencyDistributionRequest) (*GetLatencyDistributionResponse, error) {
 	if svc == nil || svc.collector == nil {
@@ -279,9 +297,16 @@ func GetLatencyDistribution(ctx context.Context, req *GetLatencyDistributionRequ
 }
 
 func (d *Dashboard) GetLatencyDistribution(ctx context.Context, req *GetLatencyDistributionRequest) (*GetLatencyDistributionResponse, error) {
-	window := req.Window
-	if window == 0 {
-		window = 5 * time.Minute
+	windowStr := req.Window
+	if windowStr == "" {
+		windowStr = "5m"
+	}
+	window, err := time.ParseDuration(windowStr)
+	if err != nil {
+		return nil, errors.New("invalid window duration")
+	}
+	if window <= 0 {
+		return nil, errors.New("window must be > 0")
 	}
 
 	// Get recent latency samples
@@ -333,6 +358,7 @@ func (d *Dashboard) GetLatencyDistribution(ctx context.Context, req *GetLatencyD
 }
 
 // GetHeatmap returns heatmap data for visualization.
+//
 //encore:api public method=POST path=/monitoring/dashboard/heatmap
 func GetHeatmap(ctx context.Context, req *GetHeatmapRequest) (*GetHeatmapResponse, error) {
 	if svc == nil || svc.aggregator == nil {
@@ -345,7 +371,7 @@ func GetHeatmap(ctx context.Context, req *GetHeatmapRequest) (*GetHeatmapRespons
 
 func (d *Dashboard) GetHeatmap(ctx context.Context, req *GetHeatmapRequest) (*GetHeatmapResponse, error) {
 	duration := req.EndTime.Sub(req.StartTime)
-	
+
 	// Determine granularity based on duration
 	var interval time.Duration
 	var numBuckets int
@@ -376,7 +402,7 @@ func (d *Dashboard) GetHeatmap(ctx context.Context, req *GetHeatmapRequest) (*Ge
 	// Define metric ranges (Y-axis)
 	var yLabels []string
 	var minValue, maxValue float64
-	
+
 	switch req.Metric {
 	case "hit_rate":
 		yLabels = []string{"0-20%", "20-40%", "40-60%", "60-80%", "80-100%"}
@@ -420,7 +446,7 @@ func (d *Dashboard) GetHeatmap(ctx context.Context, req *GetHeatmapRequest) (*Ge
 
 		// Determine which row this value belongs to
 		row := d.getHeatmapRow(value, minValue, maxValue, len(yLabels))
-		
+
 		if row >= 0 && row < len(yLabels) {
 			data[row][col] = HeatmapCell{
 				Value:   value,
@@ -447,6 +473,7 @@ func (d *Dashboard) GetHeatmap(ctx context.Context, req *GetHeatmapRequest) (*Ge
 }
 
 // GetComparison returns comparison between two time periods.
+//
 //encore:api public method=POST path=/monitoring/dashboard/comparison
 func GetComparison(ctx context.Context, req *GetComparisonRequest) (*GetComparisonResponse, error) {
 	if svc == nil || svc.aggregator == nil {
@@ -698,6 +725,7 @@ func (d *Dashboard) getHeatmapColor(value, minValue, maxValue float64) string {
 // Real-time streaming support
 
 // StreamMetrics starts a real-time metrics stream.
+//
 //encore:api public method=GET path=/monitoring/dashboard/stream
 func StreamMetrics(ctx context.Context) (*StreamSession, error) {
 	if svc == nil {
@@ -710,13 +738,14 @@ func StreamMetrics(ctx context.Context) (*StreamSession, error) {
 
 func (d *Dashboard) StartStream(ctx context.Context) (*StreamSession, error) {
 	sessionID := fmt.Sprintf("stream-%d", time.Now().UnixNano())
+	now := time.Now()
 
-	session := &StreamSession{
+	session := &streamSession{
 		ID:        sessionID,
-		Updates:   make(chan DashboardUpdate, 100),
-		StopChan:  make(chan struct{}),
-		CreatedAt: time.Now(),
-		LastPing:  time.Now(),
+		updates:   make(chan DashboardUpdate, 100),
+		stopChan:  make(chan struct{}),
+		CreatedAt: now,
+		LastPing:  now,
 	}
 
 	d.mu.Lock()
@@ -726,23 +755,23 @@ func (d *Dashboard) StartStream(ctx context.Context) (*StreamSession, error) {
 	// Start streaming goroutine
 	go d.streamWorker(session)
 
-	return session, nil
+	return &StreamSession{ID: sessionID, CreatedAt: now}, nil
 }
 
 // streamWorker sends periodic updates to a streaming session.
-func (d *Dashboard) streamWorker(session *StreamSession) {
+func (d *Dashboard) streamWorker(session *streamSession) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-session.StopChan:
+		case <-session.stopChan:
 			return
 		case <-ticker.C:
 			update := d.generateUpdate()
-			
+
 			select {
-			case session.Updates <- update:
+			case session.updates <- update:
 				session.LastPing = time.Now()
 			default:
 				// Channel full, skip this update
@@ -757,22 +786,22 @@ func (d *Dashboard) generateUpdate() DashboardUpdate {
 	stats := d.aggregator.GetStats(now.Add(-1*time.Minute), now)
 
 	metrics := &GetMetricsResponse{
-		Timestamp:      now,
-		Window:         1 * time.Minute,
-		TotalRequests:  stats.TotalRequests,
-		CacheHits:      stats.CacheHits,
-		CacheMisses:    stats.CacheMisses,
-		HitRate:        stats.HitRate,
-		QPS:            stats.QPS,
-		AvgLatency:     stats.AvgLatency,
-		P50Latency:     stats.P50Latency,
-		P90Latency:     stats.P90Latency,
-		P95Latency:     stats.P95Latency,
-		P99Latency:     stats.P99Latency,
-		ErrorRate:      stats.ErrorRate,
-		Invalidations:  stats.Invalidations,
-		Warmings:       stats.Warmings,
-		Evictions:      stats.Evictions,
+		Timestamp:     now,
+		Window:        "1m",
+		TotalRequests: stats.TotalRequests,
+		CacheHits:     stats.CacheHits,
+		CacheMisses:   stats.CacheMisses,
+		HitRate:       stats.HitRate,
+		QPS:           stats.QPS,
+		AvgLatency:    stats.AvgLatency,
+		P50Latency:    stats.P50Latency,
+		P90Latency:    stats.P90Latency,
+		P95Latency:    stats.P95Latency,
+		P99Latency:    stats.P99Latency,
+		ErrorRate:     stats.ErrorRate,
+		Invalidations: stats.Invalidations,
+		Warmings:      stats.Warmings,
+		Evictions:     stats.Evictions,
 	}
 
 	alerts := d.alertMgr.GetActiveAlerts()
@@ -792,8 +821,8 @@ func (d *Dashboard) StopStream(sessionID string) {
 	defer d.mu.Unlock()
 
 	if session, exists := d.sessions[sessionID]; exists {
-		close(session.StopChan)
-		close(session.Updates)
+		close(session.stopChan)
+		close(session.updates)
 		delete(d.sessions, sessionID)
 	}
 }
@@ -807,8 +836,8 @@ func (d *Dashboard) CleanupStaleStreams() {
 
 	for sessionID, session := range d.sessions {
 		if now.Sub(session.LastPing) > staleThreshold {
-			close(session.StopChan)
-			close(session.Updates)
+			close(session.stopChan)
+			close(session.updates)
 			delete(d.sessions, sessionID)
 		}
 	}
@@ -839,6 +868,7 @@ type ExportResponse struct {
 }
 
 // ExportMetrics exports metrics in various formats.
+//
 //encore:api public method=POST path=/monitoring/dashboard/export
 func ExportMetrics(ctx context.Context, req *ExportRequest) (*ExportResponse, error) {
 	if svc == nil {

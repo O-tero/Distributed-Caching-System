@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"encore.dev/pubsub"
+
+	"encore.app/warming"
 )
 
 //encore:service
@@ -83,32 +85,35 @@ type MetricEvent struct {
 // Request and response types
 
 type GetMetricsRequest struct {
-	Window time.Duration `json:"window"` // Time window (e.g., 1m, 5m, 1h)
+	// Window is a duration string (e.g. "1m", "5m", "1h").
+	Window string `json:"window"`
 }
 
 type GetMetricsResponse struct {
-	Timestamp      time.Time              `json:"timestamp"`
-	Window         time.Duration          `json:"window"`
-	TotalRequests  int64                  `json:"total_requests"`
-	CacheHits      int64                  `json:"cache_hits"`
-	CacheMisses    int64                  `json:"cache_misses"`
-	HitRate        float64                `json:"hit_rate"`
-	QPS            float64                `json:"qps"`
-	AvgLatency     float64                `json:"avg_latency_ms"`
-	P50Latency     float64                `json:"p50_latency_ms"`
-	P90Latency     float64                `json:"p90_latency_ms"`
-	P95Latency     float64                `json:"p95_latency_ms"`
-	P99Latency     float64                `json:"p99_latency_ms"`
-	ErrorRate      float64                `json:"error_rate"`
-	Invalidations  int64                  `json:"invalidations"`
-	Warmings       int64                  `json:"warmings"`
-	Evictions      int64                  `json:"evictions"`
+	Timestamp     time.Time `json:"timestamp"`
+	// Window is echoed back as a duration string.
+	Window        string    `json:"window"`
+	TotalRequests int64     `json:"total_requests"`
+	CacheHits     int64     `json:"cache_hits"`
+	CacheMisses   int64     `json:"cache_misses"`
+	HitRate       float64   `json:"hit_rate"`
+	QPS           float64   `json:"qps"`
+	AvgLatency    float64   `json:"avg_latency_ms"`
+	P50Latency    float64   `json:"p50_latency_ms"`
+	P90Latency    float64   `json:"p90_latency_ms"`
+	P95Latency    float64   `json:"p95_latency_ms"`
+	P99Latency    float64   `json:"p99_latency_ms"`
+	ErrorRate     float64   `json:"error_rate"`
+	Invalidations int64     `json:"invalidations"`
+	Warmings      int64     `json:"warmings"`
+	Evictions     int64     `json:"evictions"`
 }
 
 type GetAggregatedRequest struct {
-	StartTime time.Time     `json:"start_time"`
-	EndTime   time.Time     `json:"end_time"`
-	Interval  time.Duration `json:"interval"` // Aggregation interval
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+	// Interval is a duration string (e.g. "1m", "5m", "1h").
+	Interval  string    `json:"interval"`
 }
 
 type AggregatedDataPoint struct {
@@ -182,9 +187,16 @@ func GetMetrics(ctx context.Context, req *GetMetricsRequest) (*GetMetricsRespons
 }
 
 func (s *Service) GetMetrics(ctx context.Context, req *GetMetricsRequest) (*GetMetricsResponse, error) {
-	window := req.Window
-	if window == 0 {
-		window = 1 * time.Minute // Default window
+	windowStr := req.Window
+	if windowStr == "" {
+		windowStr = "1m" // Default window
+	}
+	window, err := time.ParseDuration(windowStr)
+	if err != nil {
+		return nil, errors.New("invalid window duration")
+	}
+	if window <= 0 {
+		return nil, errors.New("window must be > 0")
 	}
 
 	// Get aggregated data for the window
@@ -194,22 +206,22 @@ func (s *Service) GetMetrics(ctx context.Context, req *GetMetricsRequest) (*GetM
 	stats := s.aggregator.GetStats(startTime, now)
 
 	return &GetMetricsResponse{
-		Timestamp:      now,
-		Window:         window,
-		TotalRequests:  stats.TotalRequests,
-		CacheHits:      stats.CacheHits,
-		CacheMisses:    stats.CacheMisses,
-		HitRate:        stats.HitRate,
-		QPS:            stats.QPS,
-		AvgLatency:     stats.AvgLatency,
-		P50Latency:     stats.P50Latency,
-		P90Latency:     stats.P90Latency,
-		P95Latency:     stats.P95Latency,
-		P99Latency:     stats.P99Latency,
-		ErrorRate:      stats.ErrorRate,
-		Invalidations:  stats.Invalidations,
-		Warmings:       stats.Warmings,
-		Evictions:      stats.Evictions,
+		Timestamp:     now,
+		Window:        windowStr,
+		TotalRequests: stats.TotalRequests,
+		CacheHits:     stats.CacheHits,
+		CacheMisses:   stats.CacheMisses,
+		HitRate:       stats.HitRate,
+		QPS:           stats.QPS,
+		AvgLatency:    stats.AvgLatency,
+		P50Latency:    stats.P50Latency,
+		P90Latency:    stats.P90Latency,
+		P95Latency:    stats.P95Latency,
+		P99Latency:    stats.P99Latency,
+		ErrorRate:     stats.ErrorRate,
+		Invalidations: stats.Invalidations,
+		Warmings:      stats.Warmings,
+		Evictions:     stats.Evictions,
 	}, nil
 }
 
@@ -228,9 +240,16 @@ func (s *Service) GetAggregated(ctx context.Context, req *GetAggregatedRequest) 
 		return nil, errors.New("end_time must be after start_time")
 	}
 
-	interval := req.Interval
-	if interval == 0 {
-		interval = 1 * time.Minute // Default interval
+	intervalStr := req.Interval
+	if intervalStr == "" {
+		intervalStr = "1m" // Default interval
+	}
+	interval, err := time.ParseDuration(intervalStr)
+	if err != nil {
+		return nil, errors.New("invalid interval duration")
+	}
+	if interval <= 0 {
+		return nil, errors.New("interval must be > 0")
 	}
 
 	// Generate data points
@@ -261,22 +280,22 @@ func (s *Service) GetAggregated(ctx context.Context, req *GetAggregatedRequest) 
 	// Calculate overall summary
 	overallStats := s.aggregator.GetStats(req.StartTime, req.EndTime)
 	summary := &GetMetricsResponse{
-		Timestamp:      req.EndTime,
-		Window:         req.EndTime.Sub(req.StartTime),
-		TotalRequests:  overallStats.TotalRequests,
-		CacheHits:      overallStats.CacheHits,
-		CacheMisses:    overallStats.CacheMisses,
-		HitRate:        overallStats.HitRate,
-		QPS:            overallStats.QPS,
-		AvgLatency:     overallStats.AvgLatency,
-		P50Latency:     overallStats.P50Latency,
-		P90Latency:     overallStats.P90Latency,
-		P95Latency:     overallStats.P95Latency,
-		P99Latency:     overallStats.P99Latency,
-		ErrorRate:      overallStats.ErrorRate,
-		Invalidations:  overallStats.Invalidations,
-		Warmings:       overallStats.Warmings,
-		Evictions:      overallStats.Evictions,
+		Timestamp:     req.EndTime,
+		Window:        req.EndTime.Sub(req.StartTime).String(),
+		TotalRequests: overallStats.TotalRequests,
+		CacheHits:     overallStats.CacheHits,
+		CacheMisses:   overallStats.CacheMisses,
+		HitRate:       overallStats.HitRate,
+		QPS:           overallStats.QPS,
+		AvgLatency:    overallStats.AvgLatency,
+		P50Latency:    overallStats.P50Latency,
+		P90Latency:    overallStats.P90Latency,
+		P95Latency:    overallStats.P95Latency,
+		P99Latency:    overallStats.P99Latency,
+		ErrorRate:     overallStats.ErrorRate,
+		Invalidations: overallStats.Invalidations,
+		Warmings:      overallStats.Warmings,
+		Evictions:     overallStats.Evictions,
 	}
 
 	return &GetAggregatedResponse{
@@ -394,31 +413,15 @@ func HandleCacheMetric(ctx context.Context, event *CacheMetricEvent) error {
 
 // Subscribe to warming completion events
 var _ = pubsub.NewSubscription(
-	WarmCompletedTopic,
+	warming.WarmCompletedTopic,
 	"monitoring-warm-completed",
-	pubsub.SubscriptionConfig[*WarmCompletedEvent]{
+	pubsub.SubscriptionConfig[*warming.WarmCompletedEvent]{
 		Handler: HandleWarmCompleted,
 	},
 )
 
-// WarmCompletedEvent represents a warming completion event.
-type WarmCompletedEvent struct {
-	Key        string    `json:"key"`
-	Status     string    `json:"status"`
-	DurationMs int64     `json:"duration_ms"`
-	Strategy   string    `json:"strategy"`
-	Timestamp  time.Time `json:"timestamp"`
-}
-
-var WarmCompletedTopic = pubsub.NewTopic[*WarmCompletedEvent](
-	"cache-warm-completed",
-	pubsub.TopicConfig{
-		DeliveryGuarantee: pubsub.AtLeastOnce,
-	},
-)
-
 // HandleWarmCompleted processes warming completion events.
-func HandleWarmCompleted(ctx context.Context, event *WarmCompletedEvent) error {
+func HandleWarmCompleted(ctx context.Context, event *warming.WarmCompletedEvent) error {
 	if svc == nil {
 		return nil
 	}

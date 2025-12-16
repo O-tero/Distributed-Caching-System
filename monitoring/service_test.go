@@ -491,7 +491,7 @@ func TestService_GetMetrics(t *testing.T) {
 
 	// Get metrics
 	req := &GetMetricsRequest{
-		Window: 1 * time.Minute,
+		Window: "1m",
 	}
 
 	resp, err := svc.GetMetrics(ctx, req)
@@ -503,7 +503,7 @@ func TestService_GetMetrics(t *testing.T) {
 		t.Errorf("Expected 100 hits, got %d", resp.CacheHits)
 	}
 
-	if resp.Window != 1*time.Minute {
+	if resp.Window != "1m" {
 		t.Errorf("Expected 1m window, got %v", resp.Window)
 	}
 }
@@ -529,7 +529,7 @@ func TestService_GetAggregated(t *testing.T) {
 	req := &GetAggregatedRequest{
 		StartTime: now,
 		EndTime:   now.Add(1 * time.Minute),
-		Interval:  10 * time.Second,
+		Interval:  "10s",
 	}
 
 	resp, err := svc.GetAggregated(ctx, req)
