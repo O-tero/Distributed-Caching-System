@@ -15,8 +15,6 @@
 #   3. docker compose logs -f
 #   4. docker compose down -v (cleanup)
 
-version: '3.8'
-
 services:
   # PostgreSQL Database
   # Stores audit logs, metrics events, and system metadata
@@ -42,7 +40,7 @@ services:
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cache_user} -d ${POSTGRES_DB:-distributed_cache}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-distributed_cache}"]
       interval: 10s
       timeout: 5s
       retries: 5
