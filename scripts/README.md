@@ -14,4 +14,23 @@ cp .env.example .env
 ./scripts/backup_db.sh
 
 # 6. Stop everything
-./scripts/run_local.sh --stop
+./scripts/run_local.sh --
+
+
+<!-- -->
+
+# 1. Copy environment file
+cp .env.example .env
+
+# 2. Generate secure credentials
+openssl rand -hex 32  # For API tokens
+openssl rand -base64 32  # For passwords
+
+# 3. Edit configuration
+nano .env
+
+# 4. Start infrastructure
+cd infra/local && docker compose up -d
+
+# 5. Verify
+curl http://localhost:9400/health
