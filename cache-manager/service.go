@@ -3,11 +3,11 @@
 // request coalescing to prevent cache stampede, and event-driven coordination via Pub/Sub.
 //
 // Design Choices:
-// - L1 uses sync.RWMutex-protected map for predictable performance and memory efficiency.
-//   sync.Map was considered but RWMutex provides better control over eviction and TTL cleanup.
-// - Request coalescing via golang.org/x/sync/singleflight prevents thundering herd on cache misses.
-// - L2 is abstracted via RemoteCache interface for testability and provider flexibility.
-// - Pub/Sub coordination ensures eventual consistency across distributed instances.
+//   - L1 uses sync.RWMutex-protected map for predictable performance and memory efficiency.
+//     sync.Map was considered but RWMutex provides better control over eviction and TTL cleanup.
+//   - Request coalescing via golang.org/x/sync/singleflight prevents thundering herd on cache misses.
+//   - L2 is abstracted via RemoteCache interface for testability and provider flexibility.
+//   - Pub/Sub coordination ensures eventual consistency across distributed instances.
 //
 // Performance Characteristics:
 // - L1 Get: O(1) average, sub-microsecond for hot keys
@@ -39,6 +39,8 @@ import (
 // NOTE: Encore treats the service type as part of its schema graph.
 // Channel types are not allowed in schema definitions, so stop coordination is kept
 // at package scope rather than as a field on Service.
+//
+//encore:service
 type Service struct {
 	l1Cache     *L1Cache
 	l2Cache     RemoteCache
@@ -51,10 +53,10 @@ type Service struct {
 
 // Config holds runtime configuration for the cache manager.
 type Config struct {
-	L1MaxEntries   int           // Maximum L1 entries before eviction
-	DefaultTTL     time.Duration // Default TTL for cached items
+	L1MaxEntries    int           // Maximum L1 entries before eviction
+	DefaultTTL      time.Duration // Default TTL for cached items
 	CleanupInterval time.Duration // How often to run TTL cleanup
-	L2Enabled      bool          // Whether L2 cache is available
+	L2Enabled       bool          // Whether L2 cache is available
 }
 
 // RemoteCache abstracts the L2 distributed cache (Redis, Memcached, etc.).
@@ -72,14 +74,14 @@ type OriginFetcher interface {
 
 // Metrics tracks cache performance counters.
 type Metrics struct {
-	Hits       atomic.Int64
-	Misses     atomic.Int64
-	Sets       atomic.Int64
-	Deletes    atomic.Int64
-	Evictions  atomic.Int64
-	L2Hits     atomic.Int64
-	L2Misses   atomic.Int64
-	L2Errors   atomic.Int64
+	Hits      atomic.Int64
+	Misses    atomic.Int64
+	Sets      atomic.Int64
+	Deletes   atomic.Int64
+	Evictions atomic.Int64
+	L2Hits    atomic.Int64
+	L2Misses  atomic.Int64
+	L2Errors  atomic.Int64
 }
 
 // Request and response types for API endpoints.
@@ -98,7 +100,7 @@ type GetResponse struct {
 }
 
 type SetRequest struct {
-	Key   string          `json:"key"`
+	Key string `json:"key"`
 	// Value is JSON-encoded.
 	Value json.RawMessage `json:"value"`
 	TTL   int             `json:"ttl"` // seconds, 0 means default
@@ -120,21 +122,21 @@ type InvalidateResponse struct {
 }
 
 type MetricsResponse struct {
-	Hits         int64   `json:"hits"`
-	Misses       int64   `json:"misses"`
-	HitRate      float64 `json:"hit_rate"`
-	Sets         int64   `json:"sets"`
-	Deletes      int64   `json:"deletes"`
-	Evictions    int64   `json:"evictions"`
-	L1Size       int     `json:"l1_size"`
-	L2Hits       int64   `json:"l2_hits"`
-	L2Misses     int64   `json:"l2_misses"`
-	L2Errors     int64   `json:"l2_errors"`
+	Hits      int64   `json:"hits"`
+	Misses    int64   `json:"misses"`
+	HitRate   float64 `json:"hit_rate"`
+	Sets      int64   `json:"sets"`
+	Deletes   int64   `json:"deletes"`
+	Evictions int64   `json:"evictions"`
+	L1Size    int     `json:"l1_size"`
+	L2Hits    int64   `json:"l2_hits"`
+	L2Misses  int64   `json:"l2_misses"`
+	L2Errors  int64   `json:"l2_errors"`
 }
 
 var (
 	// Global service instance (initialized by initService)
-	svc *Service
+	svc  *Service
 	once sync.Once
 
 	// stopChan is used to stop background goroutines.
@@ -148,10 +150,10 @@ func initService() (*Service, error) {
 	var err error
 	once.Do(func() {
 		config := Config{
-			L1MaxEntries:   10000,
-			DefaultTTL:     1 * time.Hour,
+			L1MaxEntries:    10000,
+			DefaultTTL:      1 * time.Hour,
 			CleanupInterval: 1 * time.Minute,
-			L2Enabled:      false, // Disabled by default for unit tests
+			L2Enabled:       false, // Disabled by default for unit tests
 		}
 
 		stopChan = make(chan struct{})
@@ -172,6 +174,14 @@ func initService() (*Service, error) {
 	return svc, err
 }
 
+func init() {
+	var err error
+	svc, err = initService()
+	if err != nil {
+		panic(fmt.Sprintf("failed to initialize cache-manager service: %v", err))
+	}
+}
+
 // SetL2Cache allows injecting L2 cache implementation (for production or testing).
 func (s *Service) SetL2Cache(l2 RemoteCache) {
 	s.l2Cache = l2
@@ -185,6 +195,7 @@ func (s *Service) SetOriginFetcher(fetcher OriginFetcher) {
 
 // Get retrieves a value from cache with read-through to L2 and origin.
 // Complexity: O(1) average for L1 hit, O(1) + network for L2, O(1) + network + origin for miss.
+//
 //encore:api public method=GET path=/api/cache/entry/:key
 func Get(ctx context.Context, key string) (*GetResponse, error) {
 	if svc == nil {
@@ -223,7 +234,7 @@ func (s *Service) Get(ctx context.Context, key string) (*GetResponse, error) {
 	}
 
 	entry := result.(*CacheEntry)
-	
+
 	// Record latency (for monitoring)
 	_ = time.Since(startTime)
 
@@ -297,6 +308,7 @@ func (s *Service) fetchWithFallback(ctx context.Context, key string) (*CacheEntr
 
 // Set stores a value in cache with write-through to L2.
 // Complexity: O(1) for L1 + O(1) + network for L2.
+//
 //encore:api public method=PUT path=/api/cache/entry/:key
 func Set(ctx context.Context, key string, req *SetRequest) (*SetResponse, error) {
 	if svc == nil {
@@ -349,6 +361,7 @@ func (s *Service) Set(ctx context.Context, key string, req *SetRequest) (*SetRes
 
 // Invalidate removes keys from cache and publishes invalidation event.
 // Complexity: O(k) for k keys, O(n) for pattern matching.
+//
 //encore:api public method=POST path=/api/cache/invalidate
 func Invalidate(ctx context.Context, req *InvalidateRequest) (*InvalidateResponse, error) {
 	if svc == nil {
@@ -400,6 +413,7 @@ func (s *Service) Invalidate(ctx context.Context, req *InvalidateRequest) (*Inva
 }
 
 // GetMetrics returns current cache performance metrics.
+//
 //encore:api public method=GET path=/api/cache/metrics
 func GetMetrics(ctx context.Context) (*MetricsResponse, error) {
 	if svc == nil {
@@ -412,7 +426,7 @@ func (s *Service) GetMetrics(ctx context.Context) (*MetricsResponse, error) {
 	hits := s.metrics.Hits.Load()
 	misses := s.metrics.Misses.Load()
 	total := hits + misses
-	
+
 	hitRate := 0.0
 	if total > 0 {
 		hitRate = float64(hits) / float64(total)
