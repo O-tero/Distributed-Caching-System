@@ -531,18 +531,3 @@ docker compose restart redis
 5. **Use .env for customization** - never commit secrets
 
 ---
-
-## 🤝 Contributing
-
-When modifying local infrastructure:
-
-1. Test changes locally first
-2. Update this README with new features
-3. Keep `.env.example` up to date
-4. Document any new dependencies
-5. Ensure scripts remain idempotent
-
----
-
-**Last Updated**: 2024-01-15  
-**Maintainer**: Distributed Caching Team
