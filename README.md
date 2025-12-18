@@ -31,7 +31,7 @@ A production-grade, horizontally scalable distributed caching system with intell
 
 ---
 
-## 🎯 Overview
+##  Overview
 
 The Distributed Caching & Cache Invalidation System is an enterprise-ready solution designed to:
 
@@ -60,9 +60,9 @@ Traditional caching solutions often struggle with:
 
 ---
 
-## ✨ Key Features
+##  Key Features
 
-### 🎯 **Core Capabilities**
+### **Core Capabilities**
 
 - **Dual-Layer Caching (L1/L2)**
   - L1: In-memory cache with LRU/LFU eviction
@@ -87,7 +87,7 @@ Traditional caching solutions often struggle with:
   - Circuit breakers for fault tolerance
   - Graceful degradation
 
-### 📊 **Monitoring & Observability**
+### **Monitoring & Observability**
 
 - **Real-time Metrics**
   - Hit/miss rates
@@ -108,7 +108,7 @@ Traditional caching solutions often struggle with:
   - Distributed tracing (Jaeger)
   - Structured logging (JSON)
 
-### 🔒 **Enterprise-Ready**
+### **Enterprise-Ready**
 
 - Token-based authentication
 - Rate limiting per user/endpoint
@@ -119,7 +119,7 @@ Traditional caching solutions often struggle with:
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -191,7 +191,7 @@ Traditional caching solutions often struggle with:
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -238,76 +238,7 @@ open http://localhost:3000
 
 ---
 
-## 📁 Project Structure
-
-```
-distributed-cache-system/
-├── README.md                    # This file
-├── SETUP_GUIDE.md              # Detailed setup instructions
-├── .env.example                # Environment template
-├── .gitignore                  # Git ignore rules
-│
-├── pkg/                        # Shared Go packages
-│   ├── models/                 # Data models
-│   │   ├── cache.go           # Cache entry types
-│   │   └── metrics.go         # Metrics structures
-│   ├── pubsub/                # Event definitions
-│   │   ├── topics.go          # Topic constants
-│   │   └── events.go          # Event schemas
-│   ├── utils/                 # Utilities
-│   │   ├── hash.go            # Consistent hashing
-│   │   ├── pattern.go         # Pattern matching
-│   │   └── encoding.go        # Serialization
-│   └── middleware/            # HTTP middleware
-│       ├── logging.go         # Request logging
-│       └── ratelimit.go       # Rate limiting
-│
-├── services/                   # Encore microservices
-│   ├── cache-manager/         # Main cache API
-│   ├── invalidation/          # Invalidation service
-│   ├── warming/               # Cache warming
-│   └── monitoring/            # Metrics aggregation
-│
-├── frontend/                   # Admin dashboard
-│   └── dashboard/
-│       ├── src/
-│       │   ├── pages/         # React pages
-│       │   ├── components/    # Reusable components
-│       │   ├── hooks/         # Custom hooks
-│       │   ├── services/      # API services
-│       │   └── utils/         # Utility functions
-│       ├── package.json
-│       └── vite.config.ts
-│
-├── infra/                      # Infrastructure
-│   ├── local/                 # Local development
-│   │   ├── docker-compose.yml
-│   │   ├── redis.conf
-│   │   ├── postgres-init/
-│   │   └── prometheus.yml
-│   ├── k8s/                   # Kubernetes manifests
-│   └── terraform/             # Terraform IaC
-│
-├── scripts/                    # Automation scripts
-│   ├── run_local.sh           # Start local env
-│   ├── seed_data.sh           # Seed test data
-│   ├── load_test.sh           # Performance testing
-│   ├── backup_db.sh           # Database backup
-│   └── deploy.sh              # Deployment helper
-│
-├── docs/                       # Documentation
-│   ├── architecture.md        # Architecture details
-│   ├── api.md                 # API reference
-│   └── deployment.md          # Deployment guide
-│
-└── tests/                      # Integration tests
-    ├── integration/
-    └── e2e/
-```
-
----
-
-## 🎛️ Services
+## Services
 
 ### **cache-manager** (Port 9400)
 
@@ -403,7 +334,7 @@ PROMETHEUS_ENABLED=true
 
 ---
 
-## 🎨 Frontend Dashboard
+## Frontend Dashboard
 
 Modern React-based admin dashboard built with **Vite**, **TypeScript**, and **TailwindCSS**.
 
@@ -511,7 +442,7 @@ See [SETUP_GUIDE.md](SETUP_GUIDE.md) for complete configuration details.
 
 ---
 
-## 🚢 Deployment
+## Deployment
 
 ### Local Development
 
@@ -568,7 +499,7 @@ See [docs/deployment.md](docs/deployment.md) for detailed deployment guide.
 
 ---
 
-## 📊 Performance
+## Performance
 
 ### Benchmarks
 
@@ -598,7 +529,7 @@ See [docs/deployment.md](docs/deployment.md) for detailed deployment guide.
 
 ---
 
-## 📈 Monitoring
+## Monitoring
 
 ### Metrics
 
@@ -646,7 +577,7 @@ Configure alerts in `prometheus.yml`:
 
 ---
 
-## 🔒 Security
+## Security
 
 ### Authentication
 
@@ -687,7 +618,7 @@ Configure alerts in `prometheus.yml`:
 
 ---
 
-## 💻 Development
+## Development
 
 ### Prerequisites
 
@@ -731,7 +662,7 @@ cd frontend/dashboard && npm run lint
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Unit Tests
 
@@ -855,14 +786,6 @@ docker compose down -v
 docker compose up -d
 ```
 
-### Getting Help
-
-- **Documentation**: Check [docs/](docs/) folder
-- **Issues**: [GitHub Issues](https://github.com/your-org/distributed-cache-system/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/distributed-cache-system/discussions)
-- **Slack**: Join our [Slack channel](#)
-
----
 
 ## Documentation
 
@@ -917,7 +840,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ** Star us on GitHub** — it helps!
 
 [Documentation](docs/) • [API Reference](docs/api.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md)
-
-Made with ❤️ by the Distributed Caching Team
 
 </div>
