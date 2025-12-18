@@ -1,0 +1,319 @@
+{
+  "info": {
+    "name": "Distributed Cache System (Encore) - All Endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const now = new Date();",
+          "const iso = (d) => d.toISOString();",
+          "pm.collectionVariables.set('endTime', iso(now));",
+          "pm.collectionVariables.set('startTime10m', iso(new Date(now.getTime() - 10*60*1000)));",
+          "pm.collectionVariables.set('startTime60m', iso(new Date(now.getTime() - 60*60*1000)));",
+          "pm.collectionVariables.set('p1Start', iso(new Date(now.getTime() - 120*60*1000)));",
+          "pm.collectionVariables.set('p1End', iso(new Date(now.getTime() - 60*60*1000)));",
+          "pm.collectionVariables.set('p2Start', iso(new Date(now.getTime() - 60*60*1000)));",
+          "pm.collectionVariables.set('p2End', iso(now));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "authToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "cache-manager",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "PUT /api/cache/entry/:key",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/cache/entry/test:user:123",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": {\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"age\": 30\n  },\n  \"ttl\": 60\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/cache/entry/:key",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/cache/entry/test:user:123"
+          }
+        },
+        {
+          "name": "POST /api/cache/invalidate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/cache/invalidate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keys\": [\"test:user:123\"],\n  \"pattern\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/cache/metrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/cache/metrics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalidation",
+      "item": [
+        {
+          "name": "POST /invalidate/key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/invalidate/key",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keys\": [\"test:inv:user:1\"],\n  \"triggered_by\": \"postman\",\n  \"request_id\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /invalidate/pattern",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/invalidate/pattern",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pattern\": \"test:inv:*\",\n  \"triggered_by\": \"postman\",\n  \"request_id\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /audit/logs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/audit/logs?limit=10&offset=0"
+          }
+        },
+        {
+          "name": "GET /invalidate/metrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/invalidate/metrics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "warming",
+      "item": [
+        {
+          "name": "POST /warm/key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/warm/key",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keys\": [\"warm:test:key:1\", \"warm:test:key:2\"],\n  \"priority\": 50,\n  \"strategy\": \"priority\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /warm/pattern",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/warm/pattern",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pattern\": \"warm:test:*\",\n  \"limit\": 10,\n  \"priority\": 50,\n  \"strategy\": \"priority\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /warm/status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/warm/status"
+          }
+        },
+        {
+          "name": "POST /warm/trigger-predictive",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/warm/trigger-predictive"
+          }
+        },
+        {
+          "name": "GET /warm/config",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/warm/config"
+          }
+        },
+        {
+          "name": "POST /warm/config",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/warm/config",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"max_origin_rps\": 200\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "monitoring",
+      "item": [
+        {
+          "name": "GET /monitoring/metrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/monitoring/metrics?window=1m"
+          }
+        },
+        {
+          "name": "POST /monitoring/aggregated",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/monitoring/aggregated",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_time\": \"{{startTime10m}}\",\n  \"end_time\": \"{{endTime}}\",\n  \"interval\": \"1m\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /monitoring/alerts",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/monitoring/alerts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "monitoring-dashboard",
+      "item": [
+        {
+          "name": "POST /monitoring/dashboard/overview",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/monitoring/dashboard/overview",
+            "body": { "mode": "raw", "raw": "{\n  \"time_range\": \"1h\"\n}" }
+          }
+        },
+        {
+          "name": "POST /monitoring/dashboard/latency-distribution",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/monitoring/dashboard/latency-distribution",
+            "body": { "mode": "raw", "raw": "{\n  \"window\": \"5m\"\n}" }
+          }
+        },
+        {
+          "name": "POST /monitoring/dashboard/heatmap",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/monitoring/dashboard/heatmap",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_time\": \"{{startTime60m}}\",\n  \"end_time\": \"{{endTime}}\",\n  \"metric\": \"hit_rate\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /monitoring/dashboard/comparison",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/monitoring/dashboard/comparison",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"period1_start\": \"{{p1Start}}\",\n  \"period1_end\": \"{{p1End}}\",\n  \"period2_start\": \"{{p2Start}}\",\n  \"period2_end\": \"{{p2End}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /monitoring/dashboard/stream",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/monitoring/dashboard/stream"
+          }
+        },
+        {
+          "name": "POST /monitoring/dashboard/export",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/monitoring/dashboard/export",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_time\": \"{{startTime60m}}\",\n  \"end_time\": \"{{endTime}}\",\n  \"format\": \"json\",\n  \"metrics\": [\"cache_hits\", \"cache_misses\", \"hit_rate\"]\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
