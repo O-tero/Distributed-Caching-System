@@ -1,4 +1,4 @@
-#  Distributed Caching & Cache Invalidation System
+# Distributed Caching & Cache Invalidation System
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.21+-00ADD8.svg)](https://go.dev/)
@@ -9,7 +9,7 @@ A production-grade, horizontally scalable distributed caching system with intell
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Key Features](#key-features)
@@ -820,7 +820,7 @@ docker compose up -d
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
