@@ -1,4 +1,4 @@
-# 🚀 Distributed Caching & Cache Invalidation System
+#  Distributed Caching & Cache Invalidation System
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.21+-00ADD8.svg)](https://go.dev/)
